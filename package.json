@@ -1,0 +1,22 @@
+{
+  "name": "splice-microframework",
+  "version": "1.0.0",
+  "description": "High-performance signal dispatch framework for JavaScript",
+  "main": "dist/splice.js",
+  "types": "dist/splice.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lucianofedericopereira/splice.git"
+  },
+  "author": "Luciano Federico Pereira",
+  "license": "MIT",
+  "keywords": ["signal", "dispatcher", "framework", "event", "plugin"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ]
+}
