@@ -43,7 +43,7 @@ Popular libraries—Redux, RxJS, EventEmitter—excel in flexibility but can suf
 
 Splice is built in three layers:
 
-```plaintext
+```mermaid
 +---------------------+
 |      SpliceAPI      |
 |---------------------|
@@ -68,7 +68,7 @@ Splice is built in three layers:
 | pooled frames       |
 | memory reuse        |
 +---------------------+
-
+```
 ### 3.1 Helpers & Constants
 
 A collection of frozen utilities establishes message semantics:
