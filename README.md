@@ -44,30 +44,28 @@ Popular libraries—Redux, RxJS, EventEmitter—excel in flexibility but can suf
 Splice is built in three layers:
 
 ```mermaid
-+---------------------+
-|      SpliceAPI      |
-|---------------------|
-| dispatchSignal()    |
-| onSignal()          |
-| use(plugin)         |
-| dispose()           |
-+----------|----------+
-           v
-+---------------------+
-|    SignalRuntime    |
-|---------------------|
-| registerAction()    |
-| processFrame()      |
-| lifecycle hooks     |
-| metrics             |
-+----------|----------+
-           v
-+---------------------+
-|     ContextPool     |
-|---------------------|
-| pooled frames       |
-| memory reuse        |
-+---------------------+
+classDiagram
+    class SpliceAPI {
+        +dispatchSignal()
+        +onSignal()
+        +use(plugin)
+        +dispose()
+    }
+
+    class SignalRuntime {
+        +registerAction()
+        +processFrame()
+        +lifecycle hooks
+        +metrics
+    }
+
+    class ContextPool {
+        +pooled frames
+        +memory reuse
+    }
+
+    SpliceAPI --> SignalRuntime
+    SignalRuntime --> ContextPool
 ```
 ### 3.1 Helpers & Constants
 
@@ -96,13 +94,11 @@ This design eradicates GC pauses during bursts.
 
 | Offset | Field       | Size | Encoding     | Description                                      |
 |--------|-------------|------|--------------|--------------------------------------------------|
-| 0      | Control     | 1    | `u8` bitmask | Bit 7: origin  
-                                         Bit 6: retryable  
-                                         Bits 5–0: action ID |
+| 0      | Control     | 1    | `u8` bitmask | - Bit 7: origin<br>- Bit 6: retryable<br>- Bits 5–0: action ID |
 | 1      | State Code  | 1    | `u8`         | READY, VALID, PREPARED, etc.                    |
-| 2      | Result Code | 1    | `u8`         | SUCCESS=0, WARNING=10, TIMEOUT=30, FAILURE=60   |
+| 2      | Result Code | 1    | `u8`         | SUCCESS = 0, WARNING = 10, TIMEOUT = 30, FAILURE = 60 |
 
-Total header length: 3 bytes.
+**Total header length:** 3 bytes
 
 ---
 
