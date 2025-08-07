@@ -1,0 +1,2 @@
+hashbrown::raw::RawTable<(u32, Box<(dyn SignalHandler + 'static)>)>
+hashbrown::map::HashMap<u32, Box<(dyn SignalHandler + 'static)>, RandomState>

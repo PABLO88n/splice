@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Splice Core Wasm Test</title>
+</head>
+<body>
+  <h1>Splice Core Wasm Test</h1>
+  <p>Open the browser console to see the result.</p>
+
+  <script type="module">
+    import init, { init_runtime, process_frame_wasm } from './splice_core/pkg/splice_core.js';
+
+     async function runBenchmark() {
+      await init();           // Load Wasm
+      init_runtime();         // Register plugins
+
+      const frame = new Uint8Array([0x83, 0xA0, 0x00]); // Example frame
+
+      const t0 = performance.now();
+      for (let i = 0; i < 1000000; i++) {
+        process_frame_wasm(frame);
+      }
+      const t1 = performance.now();
+
+      console.log(`Wasm dispatched 1M frames in ${t1 - t0}ms`);
+    }
+
+    runBenchmark();
+
+
+    /*
+    async function runTest() {
+      await init();
+      init_runtime();
+      const frame = new Uint8Array([0x00, 0x00, 0x01, 0x2C, 0xAA, 0xBB, 0xCC]); // Signal ID 300 + payload
+      const result = process_frame_wasm(frame);
+      console.log("Plugin result:", result); // Should print 3 (payload length)
+    }
+    runTest();
+    */
+  </script>
+</body>
+</html>

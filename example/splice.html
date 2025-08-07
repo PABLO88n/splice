@@ -6,7 +6,7 @@
 		<title>Splice Example</title>
 </head>
 <body>
-<script module>
+<script type="module">
 //───\ Helpers \──────────────────────────────────────────────────────────────|
 	const _OF = obj => Object.freeze(obj);
 	const _MAP_FREEZE = map => {
@@ -877,6 +877,25 @@ const splice = { plugin: {} };
 
 
 
+
+const protocolTest1 = new SignalRuntime(4).freezeInternals();
+
+protocolTest1.registerAction("Object", ACTION_IDS.CALL, contextFrame => {
+  return { status: "ok", received: contextFrame.frame.payload };
+});
+
+protocolTest1.freezeHandlers();
+
+const t0 = performance.now();
+for (let i = 0; i < 1000000; i++) {
+  protocolTest1.dispatchSignal("call", {}, {});
+}
+const t1 = performance.now();
+
+console.log(`JS dispatched 1M signals in ${t1 - t0}ms`);
+
+/*
+
 	//──/ 1. Example: Hello World /──//
 	
 	const helloWorld = new SignalRuntime(4).freezeInternals();
@@ -937,6 +956,7 @@ for (z=0;z<20;z++){
 
     console.log(`Emitted 1M signals via fastEmitter in ${sft1 - sft0}ms`);
 }
+*/
 </script>
 </body>
 </html>
